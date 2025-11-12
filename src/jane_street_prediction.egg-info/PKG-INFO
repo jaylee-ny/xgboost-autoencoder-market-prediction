@@ -1,0 +1,13 @@
+Metadata-Version: 2.4
+Name: jane-street-prediction
+Version: 1.0.0
+Requires-Python: >=3.8
+License-File: LICENSE
+Requires-Dist: pandas>=2.3.3
+Requires-Dist: numpy>=2.3.4
+Requires-Dist: scikit-learn>=1.7.2
+Requires-Dist: xgboost>=3.1.1
+Requires-Dist: tensorflow>=2.20.0
+Dynamic: license-file
+Dynamic: requires-dist
+Dynamic: requires-python
