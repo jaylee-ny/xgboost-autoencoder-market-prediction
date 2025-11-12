@@ -50,7 +50,6 @@ class Pipeline:
         return X, y, weights, metadata
     
     def train(self):
-        """Train model on loaded data."""
         if self.X is None:
             raise ValueError("Must load data first using load_data()")
         

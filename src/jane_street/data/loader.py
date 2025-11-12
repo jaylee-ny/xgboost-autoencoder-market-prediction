@@ -7,12 +7,17 @@ class DataLoader:
         self.data_path = Path(data_path)
         self.feature_cols = None
         
-    def load(self):
+    def load(self) -> Tuple[pd.DataFrame, pd.Series, pd.Series, pd.Series, dict]:
         """
-        Load data from CSV.
+        Load Jane Street competition data and prepare for training.
         
-        Returns:
-            tuple: (features_df, target_series, weights_series, metadata_dict)
+        Key transformations:
+        1. Binary target: resp > 0 (for classification loss)
+        2. Actual returns: resp values (for utility metric)
+        3. Weights: provided by competition (non-uniform sampling)
+        
+        Why both targets? XGBoost optimizes binary cross-entropy,
+        but competition evaluates on weighted return utility.
         """
         if not self.data_path.exists():
             raise FileNotFoundError(

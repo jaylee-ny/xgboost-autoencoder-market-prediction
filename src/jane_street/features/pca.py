@@ -24,7 +24,11 @@ class PCAReducer:
         cumsum = np.cumsum(pca_temp.explained_variance_ratio_)
         self.n_components = np.argmax(cumsum >= self.variance_threshold) + 1
         
-        self.pca = PCA(n_components=self.n_components, random_state=self.random_state)
+        # Use PCA instead of feature selection because:
+        # 1. Preserves feature interactions (linear combinations)
+        # 2. 95% variance threshold balances information vs speed
+        # 3. More stable than greedy selection (no feature drift)
+        self.pca = PCA(n_components=self.n_components)
         self.pca.fit(X_scaled)
         
         return self

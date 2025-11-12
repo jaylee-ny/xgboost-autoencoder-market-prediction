@@ -1,0 +1,27 @@
+model:
+  xgboost:
+    n_estimators: 500
+    max_depth: 6
+    learning_rate: 0.1
+    
+  autoencoder:
+    encoding_dim: 32
+    epochs: 50
+    batch_size: 1024
+    
+  ensemble:
+    xgb_weight: 0.7
+    ae_weight: 0.3
+
+features:
+  pca:
+    variance_threshold: 0.95
+    
+evaluation:
+  n_splits: 5
+  gap: 1  # Days between train/test to prevent leakage
+  
+transaction_costs:
+  cost_bps: 5  # Basis points per trade
+
+random_seed: 42
