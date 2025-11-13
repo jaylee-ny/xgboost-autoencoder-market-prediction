@@ -1,23 +1,29 @@
 import numpy as np
 
 
-def calculate_utility(y_true, y_pred, weights, returns):
+def calculate_utility(y_true, y_pred, weights, returns, threshold=0.5):
     """
-    Args:
-        y_true: Actual binary labels (for interface consistency)
-        y_pred: Predicted probabilities
-        weights: Sample weights from competition
-        returns: Actual returns from competition
-        
-    Returns:
-        Utility score (higher is better)
+    Formula from competition:
+    - p_i = sum(weight * resp * action) for each date i
+    - t = (sum(p_i) / sqrt(sum(p_i^2))) * sqrt(250 / n_days)
+    - utility = min(max(t, 0), 6) * sum(p_i)
+    
+    For simplicity, using sum(p_i) as proxy since per-date aggregation requires date column.
     """
-    actions = (y_pred >= 0.5).astype(int)
-    utility = np.sum(returns * weights * actions)
+    actions = (y_pred >= threshold).astype(int)
+    
+    # Daily P&L proxy: weighted returns when action = 1
+    daily_pnl = returns * weights * actions
+    
+    # Simplified utility: sum of profitable actions
+    # Full implementation would require date grouping for Sharpe calculation
+    utility = np.sum(daily_pnl)
+    
     return utility
 
 
 def calculate_utility_improvement(baseline_utility, improved_utility):
+    """Percentage improvement over baseline."""
     if baseline_utility == 0:
         return 100.0 if improved_utility > 0 else 0.0
     
@@ -25,18 +31,21 @@ def calculate_utility_improvement(baseline_utility, improved_utility):
     return improvement
 
 
-def calculate_transaction_costs(predictions, returns, weights, cost_bps=5):
+def calculate_transaction_costs(predictions, returns, weights, cost_bps=5, threshold=0.5):
     """
+    Net utility after transaction costs.
+    
     Args:
         predictions: Predicted probabilities
         returns: Actual returns
         weights: Sample weights
-        cost_bps: Transaction cost in basis points (default 5 bps)
+        cost_bps: Transaction cost in basis points
+        threshold: Decision threshold
         
     Returns:
         dict with gross utility, costs, and net utility
     """
-    actions = (predictions >= 0.5).astype(int)
+    actions = (predictions >= threshold).astype(int)
     
     gross_utility = np.sum(returns * weights * actions)
     

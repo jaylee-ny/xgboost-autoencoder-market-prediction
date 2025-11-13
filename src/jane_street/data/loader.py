@@ -35,9 +35,9 @@ class DataLoader:
             raise ValueError("No feature columns found")
         
         X = df[self.feature_cols].copy()
-        y = (df['resp'] > 0).astype(int)
-        weights = df['weight'].copy() if 'weight' in df.columns else pd.Series(1.0, index=df.index)
         returns = df['resp'].copy()
+        y = (returns > 0).astype(int)
+        weights = df['weight'].copy() if 'weight' in df.columns else pd.Series(1.0, index=df.index)
         
         metadata = {
             'n_samples': len(df),

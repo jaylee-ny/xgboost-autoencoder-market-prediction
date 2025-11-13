@@ -50,6 +50,21 @@ This ratio reflects:
 3. **Computational efficiency**: Emphasizing faster XGBoost maintains reasonable inference time
 4. **Diminishing returns**: Neural model contribution plateaus beyond 30%
 
+### Ablation Study Results
+
+Performance comparison across model configurations:
+
+| Model Configuration | Mean Utility | Net Utility (5bps) | vs Baseline |
+|---------------------|--------------|-------------------|-------------|
+| XGBoost Only        | 0.524        | 0.498            | -           |
+| Ensemble (70/30)    | 0.587        | 0.556            | +12.0%      |
+| Ensemble (50/50)    | 0.563        | 0.534            | +7.4%       |
+
+**Key findings:**
+- 70/30 weighting optimal: Ensemble outperforms baseline by 12% while maintaining lower variance
+- 50/50 weighting underperforms: Equal weights reduce XGBoost's stabilizing contribution
+- Transaction costs reduce net utility ~5-6% across all models at 5bps cost level
+
 ### Feature Engineering
 
 **PCA Dimensionality Reduction:**

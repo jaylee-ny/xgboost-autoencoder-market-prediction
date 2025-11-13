@@ -1,5 +1,8 @@
 import numpy as np
+import logging
 from sklearn.model_selection import BaseCrossValidator
+
+logger = logging.getLogger(__name__)
 
 
 class TimeSeriesSplit(BaseCrossValidator):
@@ -39,9 +42,9 @@ class TimeSeriesSplit(BaseCrossValidator):
         return self.n_splits
 
 
-def cross_validate(model, X, y, weights, returns, n_splits=5):
+def cross_validate(model, X, y, weights, returns, n_splits=5, cost_bps=5):
     """
-    Cross-validate model with utility metric.
+    Cross-validate model with utility metric and transaction costs.
     
     Args:
         model: Model instance with fit/predict_proba methods
@@ -50,14 +53,17 @@ def cross_validate(model, X, y, weights, returns, n_splits=5):
         weights: Sample weights
         returns: Sample returns
         n_splits: Number of CV folds
+        cost_bps: Transaction cost in basis points
     
     Returns:
         dict with mean/std utility and individual fold scores
     """
-    from .metrics import calculate_utility
+    from .metrics import calculate_utility, calculate_transaction_costs
     
     cv = TimeSeriesSplit(n_splits=n_splits, gap=1)
     utilities = []
+    gross_utilities = []
+    net_utilities = []
     
     for fold_num, (train_idx, test_idx) in enumerate(cv.split(X)):
         X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
@@ -71,10 +77,22 @@ def cross_validate(model, X, y, weights, returns, n_splits=5):
         utility = calculate_utility(y_test, y_pred, w_test, r_test)
         utilities.append(utility)
         
-        print(f"Fold {fold_num + 1}/{n_splits}: utility = {utility:.6f}")
+        # Calculate net utility after costs
+        cost_result = calculate_transaction_costs(y_pred, r_test, w_test, cost_bps=cost_bps)
+        gross_utilities.append(cost_result['gross_utility'])
+        net_utilities.append(cost_result['net_utility'])
+        
+        logger.info(f"Fold {fold_num + 1}/{n_splits}: "
+                   f"utility={utility:.6f}, "
+                   f"gross={cost_result['gross_utility']:.6f}, "
+                   f"net={cost_result['net_utility']:.6f} ({cost_bps}bps)")
     
     return {
         'mean_utility': np.mean(utilities),
         'std_utility': np.std(utilities),
-        'utilities': utilities
+        'utilities': utilities,
+        'mean_gross_utility': np.mean(gross_utilities),
+        'mean_net_utility': np.mean(net_utilities),
+        'gross_utilities': gross_utilities,
+        'net_utilities': net_utilities,
     }
