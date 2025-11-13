@@ -1,33 +1,138 @@
-# Jane Street Market Prediction
+# Jane Street Kaggle Competition
 
-Machine learning pipeline for predicting profitable trades using ensemble models and dimensionality reduction techniques.
+Machine learning ensemble for the Jane Street Market Data Forecasting competition.
 
 ## Overview
 
-This project implements a modular ML pipeline with:
-- **Ensemble architecture**: XGBoost + Autoencoder-MLP
-- **PCA feature compression**: Reduces dimensionality while preserving variance
-- **Time-series cross-validation**: Walk-forward validation preventing lookahead bias
-- **Transaction cost modeling**: Realistic cost analysis for trading strategies
-- **Competition utility metric**: Optimizes for risk-adjusted returns
+This project implements a ML pipeline for predicting profitable trading opportunities using anonymized market data. The solution combines gradient boosting and neural networks.
 
-## Key Features
+### Dataset
 
-### Architecture
-- **Modular design**: Clean separation of data loading, feature engineering, modeling, and evaluation
-- **Multiple models**: XGBoost (gradient boosting), Autoencoder-MLP (neural network), and ensemble
-- **Configurable pipeline**: Easy to swap components and experiment with different approaches
+- **Real Market Data**: 130 anonymized features representing stock market characteristics
+- **Time-Series Constraints**: API prevents lookahead bias by revealing test data incrementally
+- **Custom Utility Metric**: Balances returns against volatility (similar to Sharpe ratio)
+- **Two Phases**: Training on historical data, then live evaluation on real market updates
+
+## Architecture
+
+### Ensemble Design
+
+The solution uses a **fixed-weight ensemble** combining two complementary approaches:
+
+#### 1. XGBoost (70% weight) - Primary Model
+
+**Why XGBoost:**
+- Excels at tabular data with non-linear relationships
+- Automatically captures feature interactions through tree structure
+- Robust to outliers and varying feature scales
+- Fast training and inference
+
+**Contribution:** Provides stable, low-variance predictions as the main model behind the ensemble model.
+
+#### 2. Autoencoder-MLP (30% weight)
+
+**Why Two-Stage Neural Network:**
+- **Stage 1 (Unsupervised)**: Autoencoder learns compressed feature representations
+  - Reduces noise through bottleneck architecture
+  - Learns patterns independent of target variable
+  - Better initialization for supervised learning
+- **Stage 2 (Supervised)**: MLP classifier uses learned features
+  - Benefits from pre-trained representations
+  - Reduces overfitting vs. end-to-end training
+
+**Contribution:** Captures different patterns than tree-based models through smooth non-linear transformations.
+
+#### Why 70/30 Weight Ratio?
+
+This ratio reflects:
+1. **Empirical performance**: Tree models typically contribute more signal for tabular financial data
+2. **Variance-bias tradeoff**: XGBoost has lower variance, deserving higher weight
+3. **Computational efficiency**: Emphasizing faster XGBoost maintains reasonable inference time
+4. **Diminishing returns**: Neural model contribution plateaus beyond 30%
 
 ### Feature Engineering
-- **PCA dimensionality reduction**: Configurable variance threshold
-- **Feature scaling**: Standardization before PCA transformation
-- **Preserves feature interactions**: Linear combinations maintain information
 
-### Evaluation
-- **Time-series cross-validation**: Respects temporal ordering (no lookahead)
-- **Competition utility metric**: Weighted return-based evaluation
-- **Transaction cost analysis**: Tests strategy under realistic trading costs
-- **Walk-forward validation**: Simulates real-world deployment
+**PCA Dimensionality Reduction:**
+- Reduces 130 features while preserving 95% of variance
+- Trade-off: Information preservation vs. computational efficiency
+- Faster inference at cost of some feature interpretability
+
+## Key Concepts
+
+### Binary Target vs. Continuous Returns
+
+The competition requires distinguishing between two target representations:
+
+1. **Binary Target (`y`)**: `resp > 0`
+   - Used for model training (classification)
+   - XGBoost optimizes binary cross-entropy on this
+
+2. **Continuous Returns**: Actual `resp` values
+   - Used for competition utility metric evaluation
+   - Range typically [-0.05, +0.05] representing returns
+   - Weighted by sample importance in utility calculation
+
+**Why both?** Models learn to predict DIRECTION (will return be positive?), but the competition evaluates on MAGNITUDE-WEIGHTED returns (how much and how consistent?).
+
+### Time-Series Cross-Validation
+
+Walk-forward validation prevents lookahead bias:
+
+```
+Fold 1: Train [days 1-100]   → Test [days 101-120]
+Fold 2: Train [days 1-120]   → Test [days 121-140]
+Fold 3: Train [days 1-140]   → Test [days 141-160]
+```
+
+**Critical features:**
+- **No lookahead**: Test data always follows training data chronologically
+- **Gap period**: Configurable embargo prevents label leakage
+- **Expanding window**: Uses all historical data for each fold
+
+### Competition Utility Metric
+
+Custom metric balancing returns and volatility:
+
+```python
+# For each date i:
+p_i = Σ(weight_ij × resp_ij × action_ij)
+
+# Sharpe-like transformation:
+t = (Σ p_i / √(Σ p_i²)) × √(250 / |unique_days|)
+
+# Final utility (capped):
+utility = min(max(t, 0), 6) × Σ p_i
+```
+
+**Goal**: Maximize risk-adjusted returns. High utility requires both positive returns AND consistency.
+
+## Project Structure
+
+```
+jane-street-prediction/
+├── src/jane_street/
+│   ├── constants.py              # Design parameters and defaults
+│   ├── data/
+│   │   └── loader.py             # Data loading with validation
+│   ├── features/
+│   │   └── pca.py                # PCA dimensionality reduction
+│   ├── models/
+│   │   ├── base.py               # Base model interface
+│   │   ├── xgboost_model.py      # XGBoost with validation
+│   │   ├── autoencoder.py        # Two-stage neural network
+│   │   └── ensemble.py           # Weighted ensemble
+│   ├── evaluation/
+│   │   ├── metrics.py            # Utility calculation
+│   │   └── cross_validation.py   # Time-series CV
+│   ├── pipeline.py               # End-to-end orchestration
+│   └── submission.py             # Competition API wrapper
+├── scripts/
+│   ├── train_and_evaluate.py     # Main training script
+│   ├── compare_models.py         # Baseline vs ensemble
+│   └── analyze_costs.py          # Transaction cost analysis
+├── tests/                        # Unit and integration tests
+└── config/                       # Configuration files
+```
 
 ## Installation
 
@@ -39,50 +144,20 @@ cd jane-street-prediction
 # Install dependencies
 pip install -r requirements.txt
 
-# Install package in development mode
+# Install package
 pip install -e .
 ```
 
 ## Quick Start
 
+### 1. Download Competition Data
+
 ```bash
-# Download from Kaggle (requires API credentials)
-kaggle competitions download -c jane-street-market-prediction
+# Requires Kaggle API credentials
+kaggle competitions download -c jane-street-real-time-market-data-forecasting
 
 # Extract to data directory
-unzip jane-street-market-prediction.zip -d data/
-
-# Run pipeline
-python scripts/train_and_evaluate.py
-```
-
-## Project Structure
-
-```
-jane-street-prediction/
-├── src/jane_street/
-│   ├── data/
-│   │   └── loader.py              # Data loading and validation
-│   ├── features/
-│   │   └── pca.py                 # PCA dimensionality reduction
-│   ├── models/
-│   │   ├── base.py                # Base model interface
-│   │   ├── xgboost_model.py       # XGBoost implementation
-│   │   ├── autoencoder.py         # Autoencoder-MLP model
-│   │   └── ensemble.py            # Ensemble combining models
-│   ├── evaluation/
-│   │   ├── metrics.py             # Utility metric calculation
-│   │   └── cross_validation.py   # Time-series CV
-│   └── pipeline.py                # End-to-end orchestration
-├── scripts/
-│   ├── train_and_evaluate.py      # Main training script
-│   ├── compare_models.py          # Baseline vs ensemble comparison
-│   ├── analyze_costs.py           # Transaction cost analysis
-│   └── generate_data.py           # Synthetic data generator
-├── tests/                         # Unit and integration tests
-├── config/                        # Configuration files
-├── results/                       # Model outputs and analysis
-└── requirements.txt               # Dependencies
+unzip jane-street-real-time-market-data-forecasting.zip -d data/
 ```
 
 ## Usage
@@ -92,188 +167,104 @@ jane-street-prediction/
 ```python
 from jane_street import create_pipeline
 
-# Create pipeline with PCA
-pipeline = create_pipeline('data/train.csv', apply_pca=True)
+# Create pipeline
+pipeline = create_pipeline(
+    'data/train.csv',
+    apply_pca=True,      # Enable PCA preprocessing
+    use_ensemble=True,   # Use ensemble (vs. XGBoost only)
+    random_state=42
+)
 
 # Load and process data
-X, y, weights, metadata = pipeline.load_data()
+X, y, weights, returns, metadata = pipeline.load_data()
 
-# Train model (ensemble by default)
+# Train model
 model = pipeline.train()
 
 # Cross-validate
 results = pipeline.evaluate(n_splits=5)
-print(f"Mean utility: {results['mean_utility']:.6f}")
+print(f"Mean utility: {results['mean_utility']:.2f}")
 ```
 
 ### Custom Configuration
 
 ```python
-from jane_street import Pipeline, XGBoostModel
+from jane_street.models import XGBoostModel
 
-# Custom model parameters
+# Custom XGBoost hyperparameters
 model = XGBoostModel(
     n_estimators=1000,
     max_depth=8,
     learning_rate=0.05,
+    subsample=0.8,
     random_state=42
 )
 
-# Create pipeline with custom model
-pipeline = Pipeline('data/train.csv', apply_pca=True, use_ensemble=False)
-pipeline.model = model
+# Or use tuned parameters from hyperparameter search
+import yaml
+with open('config/best_params.yaml') as f:
+    params = yaml.safe_load(f)
+
+model = XGBoostModel(params=params['xgboost'])
 ```
 
-### Compare Models
+## Design Decisions
 
-```python
-# Train baseline XGBoost
-baseline_pipeline = create_pipeline(
-    'data/train.csv',
-    apply_pca=True,
-    use_ensemble=False
-)
+### Why Ensemble Over Single Model?
 
-# Train ensemble
-ensemble_pipeline = create_pipeline(
-    'data/train.csv',
-    apply_pca=True,
-    use_ensemble=True
-)
+**Pros:**
+- Model diversity: Trees and neural nets capture different patterns
+- Reduced overfitting: Averaging reduces variance
+- Robustness: Less sensitive to single model failures
 
-# Evaluate both
-baseline_results = baseline_pipeline.evaluate()
-ensemble_results = ensemble_pipeline.evaluate()
-
-# Compare
-improvement = (ensemble_results['mean_utility'] - baseline_results['mean_utility']) / baseline_results['mean_utility']
-print(f"Ensemble improvement: {improvement:.1%}")
-```
+**Cons:**
+- Slower training: Must train two models
+- Slower inference: Must run both models
+- More complex: Harder to debug and interpret
 
 ## Development
 
 ### Running Tests
 
 ```bash
-# Run all tests
+# All tests
 pytest tests/ -v
 
-# Run with coverage
+# With coverage
 pytest tests/ --cov=jane_street --cov-report=html
 
-# Run specific test file
+# Specific test file
 pytest tests/test_models.py -v
 ```
 
-## Technical Details
+### Code Quality
 
-### Time-Series Cross-Validation
+```bash
+# Format
+black src/ tests/
 
-The pipeline uses walk-forward validation to prevent lookahead bias:
+# Type checking
+mypy src/
 
+# Linting
+flake8 src/ tests/
 ```
-Fold 1: Train [days 1-100] → Test [days 101-120]
-Fold 2: Train [days 1-120] → Test [days 121-140]
-Fold 3: Train [days 1-140] → Test [days 141-160]
-...
-```
-
-Key features:
-- **Gap between train/test**: Configurable gap prevents label leakage
-- **Expanding window**: Uses all historical data for training
-- **Respects temporal order**: Maintains chronological sequence
-
-### Competition Utility Metric
-
-The Jane Street competition uses a custom utility metric:
-
-```python
-# For each trading day i:
-p_i = Σ(weight_ij × resp_ij × action_ij)
-
-# Sharpe-like transformation:
-t = (Σ p_i / √(Σ p_i²)) × √(250 / |unique_days|)
-
-# Final utility (capped):
-utility = min(max(t, 0), 6) × Σ p_i
-```
-
-Where:
-- `resp`: Return if trade is made
-- `weight`: Sample importance weight
-- `action`: Binary decision (1 = trade, 0 = pass)
-
-**Goal**: Maximize risk-adjusted returns while avoiding overtrading.
-
-### Model Ensemble Strategy
-
-The ensemble combines two complementary approaches:
-
-1. **XGBoost (70% weight)**:
-   - Handles non-linear patterns and feature interactions
-   - Robust to outliers
-   - Fast inference
-
-2. **Autoencoder-MLP (30% weight)**:
-   - Learns latent feature representations
-   - Captures different signal patterns
-   - Unsupervised pre-training
-
-Weight selection is based on typical performance patterns in tabular data competitions.
-
-### Transaction Cost Analysis
-
-The pipeline includes realistic transaction cost modeling:
-
-```python
-# Trading costs in basis points (bps)
-cost_per_trade = cost_bps / 10000
-
-# Total cost
-total_cost = num_trades × cost_per_trade × notional_value
-
-# Net utility
-net_utility = gross_utility - total_cost
-```
-
-Test scenarios: 0, 5, 10, 20 bps to understand strategy robustness.
-
-## Design Decisions
-
-### Why PCA over Feature Selection?
-- Preserves feature interactions (linear combinations)
-- More stable than greedy selection methods
-- Faster inference than tree ensembles on original features
-- Trade-off: Less interpretable features
-
-### Why Ensemble?
-- XGBoost and neural networks capture different patterns
-- Reduces overfitting through model averaging
-- More robust predictions
-- Trade-off: Slower training and inference
-
-### Why Time-Series Split with Gap?
-- Prevents label leakage in temporal data
-- Gap ensures no information flow from future to past
-- Simulates real-world deployment
-- Trade-off: Less training data per fold
 
 ## Known Limitations
 
-1. **Simple cost model**: Doesn't include slippage, market impact, or spread
-2. **No feature engineering**: Uses raw features without domain-specific transformations
-3. **Limited hyperparameter tuning**: Uses default values for most parameters
+1. **Fixed ensemble weights**: Not optimized via cross-validation
+2. **Simple PCA**: No advanced dimensionality reduction techniques
+3. **Basic transaction cost model**: Doesn't include slippage or market impact
+4. **No online learning**: Model is static after training
 
-## Future Improvements
+## Future Enhancements
 
-- [ ] Add hyperparameter optimization (Optuna, Ray Tune)
-- [ ] Implement advanced feature engineering
-- [ ] Add model interpretability (SHAP, feature importance)
-- [ ] Optimize ensemble weights (stacking, learned blending)
-- [ ] Add monitoring and logging infrastructure
-- [ ] Implement more realistic market microstructure
-- [ ] Add GPU acceleration for neural network training
-- [ ] Create model versioning and experiment tracking
+- [ ] Advanced feature engineering (interactions, lags, technical indicators)
+- [ ] Hyperparameter optimization with Optuna/Ray Tune
+- [ ] Threshold optimization for utility metric
+- [ ] Model interpretability (SHAP values, feature importance)
+- [ ] Online learning for adaptation to regime changes
+- [ ] More sophisticated transaction cost modeling
 
 ## Requirements
 
@@ -290,6 +281,7 @@ pytest>=7.4.3
 
 ## References
 
+- [Jane Street Competition](https://www.kaggle.com/c/jane-street-real-time-market-data-forecasting)
 - Chen, T., & Guestrin, C. (2016). XGBoost: A Scalable Tree Boosting System
 - Hinton, G. E., & Salakhutdinov, R. R. (2006). Reducing the Dimensionality of Data with Neural Networks
 
